@@ -1,6 +1,6 @@
 ---
 name: ms365
-description: Access Microsoft 365 for One Fell Swoop via Microsoft Graph API. Use when asked to read or send email, check or create calendar events, access SharePoint, or read Teams messages. Pre-configured for rocky@onefellswoop.com.au. Covers: email (inbox, send, reply, search), calendar (events, create, update), Teams (channels, messages), SharePoint (sites, files).
+description: "Access Microsoft 365 for One Fell Swoop via Microsoft Graph API. Use when asked to read or send email, check or create calendar events, access SharePoint, or read Teams messages. Pre-configured for rocky@onefellswoop.com.au. Covers: email (inbox, send, reply, search), calendar (events, create, update), Teams (channels, messages), SharePoint (sites, files)."
 ---
 
 # Microsoft 365 Skill — OFS Studio Agent
@@ -10,22 +10,37 @@ Tokens expire after 3600s — always fetch a fresh token at the start of each M3
 
 ## Credentials
 
+The Client Secret lives in Paul's Vault in 1Password. Fetch at runtime:
+
+```bash
+CLIENT_SECRET=$(op item get "OFS Azure AD Rocky" --vault "Paul's Vault" --fields password --reveal)
 ```
-Tenant ID:     8a80ec0f-2e54-4fc7-9c59-1537d57d22ce
-Client ID:     01cb25d3-be0f-4130-a049-9cb7327d17b4
-Client Secret: <AZURE_AD_CLIENT_SECRET>
-User:          rocky@onefellswoop.com.au
-Graph base:    https://graph.microsoft.com/v1.0/users/rocky@onefellswoop.com.au
+
+Pitfall: op is installed on the OpenClaw EC2 (/usr/bin/op v2.33.1) but NOT on the Hermes EC2.
+If running on Hermes EC2, install op first or SSH to Mac (paulm@100.87.144.6) to fetch the value.
+Never commit the live secret to git — GitHub secret scanning blocks the push (happened May 9 2026).
+The shared git repo skill file uses the placeholder AZURE_AD_CLIENT_SECRET.
+
 ```
+Tenant ID:  8a80ec0f-2e54-4fc7-9c59-1537d57d22ce
+Client ID:  01cb25d3-be0f-4130-a049-9cb7327d17b4
+User:       rocky@onefellswoop.com.au
+Graph base: https://graph.microsoft.com/v1.0/users/rocky@onefellswoop.com.au
+```
+
+Client Secret lives in Paul's Vault in 1Password — fetch at the start of every M365 session:
 
 ## Fetch Token
 
 ```bash
+source ~/.config/environment.d/1password.conf
+CLIENT_SECRET=$(OP_SERVICE_ACCOUNT_TOKEN=$OP_TOKEN_PERSONAL op item get "MS365 Azure App — Rocky" --vault "Paul's Vault" --fields credential --reveal)
 TOKEN=$(curl -s -X POST \
   "https://login.microsoftonline.com/8a80ec0f-2e54-4fc7-9c59-1537d57d22ce/oauth2/v2.0/token" \
   -H "Content-Type: application/x-www-form-urlencoded" \
-  -d "grant_type=client_credentials&client_id=01cb25d3-be0f-4130-a049-9cb7327d17b4&client_secret=<AZURE_AD_CLIENT_SECRET>&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default" \
+  -d "grant_type=client_credentials&client_id=01cb25d3-be0f-4130-a049-9cb7327d17b4&client_secret=$CLIENT_SECRET&scope=https%3A%2F%2Fgraph.microsoft.com%2F.default" \
   | python3 -c "import json,sys; print(json.load(sys.stdin)['access_token'])")
+```
 ```
 
 ## Email Operations
@@ -95,12 +110,12 @@ curl -s -X POST "https://graph.microsoft.com/v1.0/users/rocky@onefellswoop.com.a
 
 ## Teams Operations
 
-**Important:** App-only (client credentials) can READ Teams messages but CANNOT SEND to channels or DMs.
+Important: App-only (client credentials) can READ Teams messages but CANNOT SEND to channels or DMs.
 Sending requires delegated permissions or an incoming webhook. Use email for outbound comms.
 
 ### Rocky's IDs
 - Rocky user ID: `e519a76f-1753-4576-8282-5ea51b94c9a2`
-- Rocky ↔ Paul DM chat ID: `19:43c180ee-0b4b-476e-b625-6b710850aa82_e519a76f-1753-4576-8282-5ea51b94c9a2@unq.gbl.spaces`
+- Rocky <-> Paul DM chat ID: `19:43c180ee-0b4b-476e-b625-6b710850aa82_e519a76f-1753-4576-8282-5ea51b94c9a2@unq.gbl.spaces`
 - Paul user ID: `43c180ee-0b4b-476e-b625-6b710850aa82`
 - OFS General team ID: `273470f2-03e2-409e-921a-e720a7418e8e`
 
@@ -110,7 +125,7 @@ curl -s "https://graph.microsoft.com/v1.0/users/e519a76f-1753-4576-8282-5ea51b94
   -H "Authorization: Bearer $TOKEN"
 ```
 
-### Read DM messages (Rocky ↔ Paul)
+### Read DM messages (Rocky <-> Paul)
 ```bash
 CHAT_ID="19:43c180ee-0b4b-476e-b625-6b710850aa82_e519a76f-1753-4576-8282-5ea51b94c9a2@unq.gbl.spaces"
 curl -s "https://graph.microsoft.com/v1.0/chats/$CHAT_ID/messages" \

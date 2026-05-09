@@ -9,13 +9,21 @@ Interact with Trello via REST API calls using `exec` (curl). Credentials are pre
 
 ## Credentials
 
-```
-API Key:  <TRELLO_API_KEY>
-Token:    <TRELLO_API_TOKEN>
-Base URL: https://api.trello.com/1
+Credentials live in Paul's Vault in 1Password. Fetch at runtime via `op`:
+
+```bash
+source ~/.config/environment.d/1password.conf
+TRELLO_KEY=$(OP_SERVICE_ACCOUNT_TOKEN=$OP_TOKEN_PERSONAL op item get "Trello API — Rocky" --vault "Paul's Vault" --fields "API Key" --reveal)
+TRELLO_TOKEN=$(OP_SERVICE_ACCOUNT_TOKEN=$OP_TOKEN_PERSONAL op item get "Trello API — Rocky" --vault "Paul's Vault" --fields "Token" --reveal)
 ```
 
-Always append `?key=<KEY>&token=<TOKEN>` (or `&key=...&token=...`) to every request.
+Base URL: https://api.trello.com/1
+
+Always append `?key=$TRELLO_KEY&token=$TRELLO_TOKEN` (or `&key=...&token=...`) to every request.
+
+Base URL: https://api.trello.com/1
+
+Always append `?key=$TRELLO_KEY&token=$TRELLO_TOKEN` (or `&key=...&token=...`) to every request.
 
 ## Key Board & List IDs
 
