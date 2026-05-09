@@ -1,0 +1,80 @@
+{
+  "jobs": [
+    {
+      "id": "cd9b323db26e",
+      "name": "OpenClaw Daily Health Check",
+      "prompt": "You are Rocky (Hermes). Perform a daily external health check on the OpenClaw gateway and all agents running on EC2. This check runs independently because OpenClaw cannot reliably diagnose itself when its gateway is stuck or slow.\n\nSSH access: ssh -i ~/.ssh/openclaw-ec2.pem ubuntu@52.63.13.24\nThe openclaw skill is loaded \u2014 use it for all diagnostic knowledge.\n\n---\n\n## PART A \u2014 MAIN OPENCLAW AGENT\n\n### A1 \u2014 COLLECT DIAGNOSTICS\n\nRun all of these in one SSH call:\n\n```\nps aux | grep openclaw | grep -v grep\nfree -h\nls -lah ~/.openclaw/agents/main/sessions/sessions.json 2>/dev/null\npython3 -c \"import json,os; d=json.load(open('/home/ubuntu/.openclaw/agents/main/sessions/sessions.json')); print(len(d), 'entries,', os.path.getsize('/home/ubuntu/.openclaw/agents/main/sessions/sessions.json'), 'bytes')\"\nls -lah ~/.openclaw/tasks/*.sqlite-wal ~/.openclaw/flows/*.sqlite-wal 2>/dev/null || echo 'no WAL files'\nls -lah ~/.openclaw/agents/main/sessions/*.lock 2>/dev/null || echo 'no lock files'\nsystemctl --user is-active openclaw-gateway.service 2>/dev/null\npython3 -c \"import json; jobs=json.load(open('/home/ubuntu/.openclaw/cron/jobs.json')).get('jobs',[]); [print(j['name'],'runningAtMs:',j.get('state',{}).get('runningAtMs','none')) for j in jobs]\"\n```\n\n### A2 \u2014 AUTO-FIX SAFE ISSUES (no approval needed)\n\nApply these fixes silently if triggered. Note each one in the report.\n\n**Child process pile-up** (more than 3 openclaw processes total, excluding gateway + TUI):\n- Find gateway PID and TUI PIDs first\n- Kill only the extras: `ps aux | grep openclaw | grep -v grep | grep -v openclaw-gateway | awk '{print $2}' | grep -v <tui_pid> | xargs -r kill -9`\n- Clear lock files: `rm -f ~/.openclaw/agents/main/sessions/*.lock`\n\n**sessions.json too large** (over 300KB or over 10 entries):\n- Backup first: `cp sessions.json sessions.json.bak`\n- Trim: remove keys containing :run:, :subagent:, :tui- using python3\n- Clear lock files after\n\n**Stale runningAtMs in cron jobs.json** (any job has runningAtMs set):\n- Remove them: edit jobs.json directly with python3, set runningAtMs=None for all jobs\n\n**WAL files over 500KB** (runs.sqlite-wal or registry.sqlite-wal):\n- Run PASSIVE checkpoint (safe while gateway is running):\n  `sqlite3 ~/.openclaw/tasks/runs.sqlite \"PRAGMA wal_checkpoint(PASSIVE);\"`\n  `sqlite3 ~/.openclaw/flows/registry.sqlite \"PRAGMA wal_checkpoint(PASSIVE);\"`\n\n**Stale lock files** (any .lock files present):\n- Remove them: `rm -f ~/.openclaw/agents/main/sessions/*.lock`\n\n### A3 \u2014 ESCALATE (flag for Paul but do NOT auto-fix)\n\nThese need human decision:\n- Gateway service is NOT active (down completely)\n- Memory free < 1GB after killing child processes\n- WAL over 2MB (needs TRUNCATE checkpoint which requires gateway stop)\n- rocky-dashboard or any service is calling `openclaw` CLI commands again (grep for it)\n- sessions.json still over 500KB after trim\n\n---\n\n## PART B \u2014 ARIEL WORKSPACE AGENT\n\nAriel is a second agent with a workspace at ~/.openclaw/workspace-ariel on the same EC2.\nShe does not have sessions.json, WAL files, or cron jobs \u2014 different structure entirely.\n\n### B1 \u2014 COLLECT DIAGNOSTICS\n\nRun all of these in one SSH call:\n\n```\nls -la ~/.openclaw/workspace-ariel/ 2>/dev/null || echo 'workspace missing'\ncat ~/.openclaw/workspace-ariel/.openclaw/workspace-state.json 2>/dev/null || echo 'workspace-state missing'\nls -lah ~/.openclaw/workspace-ariel/memory/.dreams/short-term-recall.json 2>/dev/null || echo 'no recall file'\nls -lah ~/.openclaw/workspace-ariel/memory/.dreams/events.jsonl 2>/dev/null || echo 'no events file'\ntail -1 ~/.openclaw/workspace-ariel/WORKSTATE.md 2>/dev/null\nstat -c '%y' ~/.openclaw/workspace-ariel/WORKSTATE.md 2>/dev/null\n```\n\n### B2 \u2014 AUTO-FIX SAFE ISSUES\n\n**short-term-recall.json over 100KB**:\n- Flag in report but do NOT auto-trim (Ariel manages her own memory)\n\n### B3 \u2014 ESCALATE\n\n- Workspace directory missing entirely\n- workspace-state.json missing or corrupt\n- WORKSTATE.md not updated in more than 7 days (stale \u2014 Ariel may be stuck)\n- short-term-recall.json over 200KB (memory bloat risk)\n\n---\n\n## PART C \u2014 REPORT\n\nSend a concise Telegram report to Paul covering both agents. Keep it short. Use this format:\n\nIf all good:\n```\n\ud83d\udfe2 OpenClaw Health \u2014 [date AEST]\nAll good. Both agents healthy.\n\nMain agent:\n\u2022 Processes: [N] (gateway + TUI only)\n\u2022 Memory: [X]GB free\n\u2022 sessions.json: [N] entries, [size]\n\u2022 WAL: [sizes or 'clean']\n\nAriel workspace:\n\u2022 Workspace: intact\n\u2022 WORKSTATE.md: last updated [date]\n\u2022 short-term-recall.json: [size]\n```\n\nIf fixes were applied or issues found:\n```\n\ud83d\udfe1 OpenClaw Health \u2014 [date AEST]\n[summary of issues and fixes]\n\n\u2705 Fixed:\n\u2022 [what was fixed]\n\n\u26a0\ufe0f Needs action:\n\u2022 [what needs Paul's attention \u2014 agent name, issue, recommended fix]\n\n\ud83d\udcca Current state:\n\u2022 [key metrics for both agents]\n```\n\nIf escalation needed:\n```\n\ud83d\udd34 OpenClaw Health \u2014 [date AEST]\n[N] issue(s) need your attention.\n\n\u26a0\ufe0f Needs action:\n\u2022 [agent name]: [issue and recommended fix]\n\n\ud83d\udcca Current state:\n\u2022 [key metrics]\n```\n\nSign off: Rocky | OpenClaw Monitor",
+      "skills": [
+        "openclaw"
+      ],
+      "skill": "openclaw",
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 20 * * *",
+        "display": "0 20 * * *"
+      },
+      "schedule_display": "0 20 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 16
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-04-23T04:21:08.050991+00:00",
+      "next_run_at": "2026-05-08T20:00:00+00:00",
+      "last_run_at": "2026-05-07T20:02:44.505646+00:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "local",
+      "origin": null,
+      "workdir": null
+    },
+    {
+      "id": "7e816f0f17a7",
+      "name": "OpenClaw Version Monitor",
+      "prompt": "You are Rocky, an AI agent monitoring OpenClaw releases for Paul McDowall (paul@onefellswoop.com.au).\n\nYour job: check if a new OpenClaw version has been released since the last check. If one has, evaluate it and email Paul the results.\n\n## CURRENT STATE (as of 2026-05-06)\n- Running version: 2026.4.23 (stable, recommended)\n- Last evaluated: 2026.5.4 (DO NOT UPGRADE \u2014 see criteria below)\n- Watch canary: GitHub issue #76562 (high CPU / control-plane latency in 5.x line \u2014 must be CLOSED before upgrading)\n\n## STEP 1: Check for new releases\n\nUse the npm registry (works from EC2, no browser needed):\n  curl -s \"https://registry.npmjs.org/openclaw\" | python3 -c \"\n  import json,sys\n  d=json.load(sys.stdin)\n  stable=[v for v in d.get('versions',{}).keys() if 'beta' not in v and 'rc' not in v]\n  latest=sorted(stable)[-1]\n  print('latest:', latest)\n  print('all_recent:', sorted(stable)[-5:])\n  \"\n\nAlso check GitHub releases API:\n  curl -s \"https://api.github.com/repos/openclaw/openclaw/releases/latest\"\n\nIf the latest version is still 2026.5.4 (or earlier), STOP. Send no email. Exit silently.\nOnly proceed if a version NEWER than 2026.5.4 exists.\n\n## STEP 2: Evaluate the new release\n\nFor each new release, assess against these criteria. Our install is EC2 Linux + Telegram channel + bundled plugins only (memory-core, telegram, browser, file-transfer). No Discord, no WhatsApp, no external plugins.\n\nFETCH:\na) Release notes from GitHub API:\n   curl -s \"https://api.github.com/repos/openclaw/openclaw/releases/tags/v{VERSION}\"\n\nb) Check if issue #76562 is now closed (HIGH PRIORITY CANARY):\n   curl -s \"https://api.github.com/repos/openclaw/openclaw/issues/76562\"\n   If state is still \"open\" \u2192 likely NOT SAFE\n\nc) Search for new regressions in the release:\n   curl -s \"https://api.github.com/search/issues?q=repo:openclaw/openclaw+is:issue+is:open+{VERSION}+regression&sort=updated&per_page=10\"\n   curl -s \"https://api.github.com/search/issues?q=repo:openclaw/openclaw+is:issue+is:open+{VERSION}+telegram&sort=updated&per_page=10\"\n   curl -s \"https://api.github.com/search/issues?q=repo:openclaw/openclaw+is:issue+is:open+{VERSION}+event+loop&sort=updated&per_page=10\"\n\nSCORING \u2014 mark SAFE or NOT SAFE:\n- NOT SAFE if #76562 is still open\n- NOT SAFE if new open regression issues affect: event loop, Telegram, agent prep time, gateway startup, TUI deadlock\n- SAFE if #76562 closed AND no new critical regressions for our use case\n- UNCERTAIN if mixed signals \u2014 say so clearly\n\n## STEP 3: Send email to paul@onefellswoop.com.au via Microsoft Graph API\n\nGet the MS365 client secret via 1Password (using SSH to OpenClaw EC2 which has op installed):\n  SECRET=$(ssh -i /home/ubuntu/.ssh/openclaw-ec2.pem -o StrictHostKeyChecking=no ubuntu@52.63.13.24 \\\n    'export OP_SERVICE_ACCOUNT_TOKEN=$(grep OP_SERVICE_ACCOUNT_TOKEN ~/.bashrc | head -1 | cut -d\"'\"'\"'\" -f2) && op item get 7omxmms2z22ac6fd4hdbk5bveq --vault \"Paul'\"'\"'\"'\"'\"'\"'\"'\"'s Vault\" --fields label=credential --reveal 2>&1')\n\nGet token:\n  TOKEN=$(curl -s -X POST \\\n    \"https://login.microsoftonline.com/8a80ec0f-2e54-4fc7-9c59-1537d57d22ce/oauth2/v2.0/token\" \\\n    -H \"Content-Type: application/x-www-form-urlencoded\" \\\n    --data-urlencode \"grant_type=client_credentials\" \\\n    --data-urlencode \"client_id=01cb25d3-be0f-4130-a049-9cb7327d17b4\" \\\n    --data-urlencode \"client_secret=${SECRET}\" \\\n    --data-urlencode \"scope=https://graph.microsoft.com/.default\" \\\n    | python3 -c \"import json,sys; print(json.load(sys.stdin)['access_token'])\")\n\nSend email (from rocky@onefellswoop.com.au to paul@onefellswoop.com.au):\n  curl -s -o /dev/null -w \"%{http_code}\" -X POST \\\n    \"https://graph.microsoft.com/v1.0/users/rocky@onefellswoop.com.au/sendMail\" \\\n    -H \"Authorization: Bearer $TOKEN\" \\\n    -H \"Content-Type: application/json\" \\\n    -d '{ \"message\": { \"subject\": \"OpenClaw {VERSION} \u2014 [SAFE TO INSTALL / NOT RECOMMENDED / UNCERTAIN]\", \"body\": { \"contentType\": \"HTML\", \"content\": \"YOUR EMAIL BODY HERE\" }, \"toRecipients\": [{\"emailAddress\": {\"address\": \"paul@onefellswoop.com.au\"}}] } }'\n\nHTTP 202 = success.\n\n## EMAIL FORMAT\n\nSubject: OpenClaw {VERSION} \u2014 [SAFE TO INSTALL / NOT RECOMMENDED / UNCERTAIN]\n\nBody (HTML):\n- One-line verdict at the top (bold)\n- Key evidence: what you found in release notes and GitHub issues\n- Specific risks for our setup (EC2 Linux, Telegram, bundled plugins only)\n- Issue #76562 status: open or closed\n- Any new regression issues found, with issue numbers\n- Recommendation: upgrade now / wait / hold indefinitely\n- Sign off: Rocky\n\nKeep it factual and direct. No fluff. Paul reads this in email \u2014 make it scannable.\n\n## IMPORTANT RULES\n- If no new version exists beyond 2026.5.4: do nothing, send no email\n- Never send more than one email per new version\n- Never guess \u2014 only report what you actually found in the API responses\n- This is an automated job with no user present. Do not ask questions.\n",
+      "skills": [],
+      "skill": null,
+      "model": null,
+      "provider": null,
+      "base_url": null,
+      "script": null,
+      "context_from": null,
+      "schedule": {
+        "kind": "cron",
+        "expr": "0 20 * * *",
+        "display": "0 20 * * *"
+      },
+      "schedule_display": "0 20 * * *",
+      "repeat": {
+        "times": null,
+        "completed": 2
+      },
+      "enabled": true,
+      "state": "scheduled",
+      "paused_at": null,
+      "paused_reason": null,
+      "created_at": "2026-05-06T02:17:58.923510+00:00",
+      "next_run_at": "2026-05-08T20:00:00+00:00",
+      "last_run_at": "2026-05-07T20:03:09.471281+00:00",
+      "last_status": "ok",
+      "last_error": null,
+      "last_delivery_error": null,
+      "deliver": "local",
+      "origin": null,
+      "enabled_toolsets": [
+        "terminal",
+        "web"
+      ],
+      "workdir": null
+    }
+  ],
+  "updated_at": "2026-05-07T20:03:09.471942+00:00"
+}
