@@ -9,6 +9,12 @@ triggers:
   - openclaw config
   - openclaw channel
   - openclaw doctor
+  - openclaw upgrade
+  - upgrade openclaw
+  - openclaw mac client
+  - openclaw releases
+  - should I update openclaw
+  - openclaw launchctl
 confirmed: true
 ---
 
@@ -22,7 +28,7 @@ Slack, Signal, iMessage, etc.) to AI model providers (Anthropic, OpenAI, Gemini,
 Ollama, etc.) and gives a 24/7 AI assistant that can take real-world actions.
 
 - GitHub: https://github.com/openclaw/openclaw (~360k stars)
-- Docs: https://docs.openclaw.ai
+- Version running: 2026.6.6 (8c802aa) — upgraded 2026-06-13
 - Skills marketplace: https://clawhub.ai
 - Discord: https://discord.gg/openclaw
 - Security: https://trust.openclaw.ai
@@ -1829,18 +1835,14 @@ Key pitfalls for version evaluation:
 
 ## Version Review Records
 
-Past version upgrade reviews are in references/:
-- references/version-review-2026.4.21-to-2026.4.29.md — breaking changes, changelog technique, Paul's config state at time of review
-- references/version-stability-notes.md — per-version stability assessment, known-broken versions, key GitHub issues, Mac install details
-- references/version-stability-may2026.md — May 2026 stability table (current recommended: 2026.4.23)
-- references/version-evaluation-workflow.md — full evaluation procedure: curl commands, scoring rubric, automated cron job details
+Past version upgrade reviews in references/: version-review-2026.4.21-to-2026.4.29.md, version-stability-notes.md, version-stability-may2026.md, version-evaluation-workflow.md.
 
 ## Reference Files (in this skill)
 
-- templates/ec2-upgrade-procedure.md — full step-by-step upgrade runbook for this EC2
-- references/changelog-2026.4.29-notes.md — breaking changes and relevant fixes for the 2026.4.29 upgrade
-- references/version-upgrade-notes.md — per-version upgrade notes from real sessions
-- references/github-issues-v2026.4.29.md — known open GitHub issues in v2026.4.29 (TUI deadlock #75844, undici IPv6 #75539, sync reads #75656, idle CPU #75759)
+- templates/ec2-upgrade-procedure.md — full upgrade runbook for this EC2
+- references/changelog-2026.4.29-notes.md, references/version-upgrade-notes.md, references/github-issues-v2026.4.29.md — 4.29-era upgrade/issue notes
+- references/openclaw-hooks-memory-bug.md — OOM/memory incidents; leads with Jun 20 2026 gateway OOM death-spiral (resize→t3a.xlarge 16GB + cgroup cap MemoryMax=8G/OOMScore=600 in limits.conf drop-in) + oauth2-proxy secret hardening (→~/.config/oauth2-proxy.env mode 600). Hooks #90993 = HISTORICAL (fixed 2026.6.6+).
+- references/openclaw-monitoring-watchdog.md — external watchdog + Telegram alerting (cron "OpenClaw EC2 watchdog" id 7fadd28a5351, */5, no_agent); reusable `hermes send --to telegram` pattern.
 
 ## Rocky's Access Path to Paul's Mac (confirmed May 2026)
 
